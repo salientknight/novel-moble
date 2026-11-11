@@ -91,6 +91,10 @@ Bug reports, compatibility tests, accessibility feedback, and pull requests are 
 
 This is a small independent project built to solve a practical writing problem. Please treat the synchronization tools as experimental until they have broader testing.
 
-## Licensing
+## License and disclaimer
 
-A license has not yet been selected. Until a license file is added, public visibility alone does **not** grant permission to copy, modify, or redistribute the source. An explicit open-source license should be chosen before announcing this as an open-source release.
+**Novel Mobile is provided free of charge and is used entirely at your own risk.** This is experimental software. Keep independent backups of your writing before using the editor or synchronization tools.
+
+This project is licensed under the **MIT License**. You are welcome to fork it, modify it, and continue developing it. If you redistribute the software or substantial portions of its code, please follow the MIT License terms, including retaining the copyright and license notice.
+
+The software is provided **"as is," without warranty of any kind**. See [LICENSE](LICENSE) for the complete legal terms.
