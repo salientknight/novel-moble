@@ -1,51 +1,96 @@
-# novel-moble
+# Novel Mobile
 
-Native Android companion for [novelWriter](https://novelwriter.io/), built with Kotlin and Jetpack Compose.
+An experimental, community-oriented Android companion for [novelWriter](https://novelwriter.io/), with optional USB synchronization for Linux.
 
-## Status
-Initial Android scaffold. **Project import, editing, and saving are not implemented yet.** Do not use this build with your manuscript.
+> **Early development / use at your own risk.** Back up your novelWriter projects before trying this software. The editor and sync tooling are not yet production-hardened. This is an independent project, not an official novelWriter release.
 
-## Build
-Install Android Studio (current stable), Android SDK Platform 35, and JDK 17. Open this repository as a Gradle project. Android Studio can install missing Gradle components. Use an Android emulator or physical device to run the `app` configuration.
+## Why this exists
 
-If the Gradle wrapper is absent, run `gradle wrapper --gradle-version 8.9` using a local Gradle installation, or let Android Studio import the Gradle project. The wrapper executable and JAR should be committed after generating them.
+This project started with a straightforward problem: I was writing a novel on Linux with novelWriter, and I wanted to keep writing when I was away from my desk—especially from my Android phone.
 
-## Roadmap
-1. Validate novelWriter's current .nwx/.nwd format against upstream fixtures.
-2. Read-only project browsing via Android Storage Access Framework.
-3. Safe editing, atomic saves where supported, backup and conflict detection.
-4. Sync interoperability and device testing.
+novelWriter offered a useful way to organize a manuscript, but it didn't give me a native Android writing experience. I didn't want to move chapters manually between apps, depend on a cloud service, or risk losing writing because I forgot to synchronize.
 
-No storage, network, or microphone permissions are requested by this scaffold.
+So Novel Mobile began as a small experiment: read a novelWriter project on Android, dictate into a scene, save it in its original format, and carry those changes back to Linux. That experiment became a native Android app and a small USB synchronization launcher.
 
-## USB synchronization launcher (Linux)
+The goal isn't to replace novelWriter or build another giant writing suite. It's to remove friction between the places where writing happens.
 
-The launcher uses ADB on demand and exits after novelWriter closes. It never runs a background service.
+## What works today
 
-Register each project **once**, after its phone copy has been transferred and its sync baseline initialized:
+- Native Android app built with Kotlin and Jetpack Compose
+- Open a local novelWriter project folder using Android's document picker
+- Browse its project tree and edit document files
+- Dictate using the Android keyboard's voice input
+- Save changes, with a local recovery copy before replacement
+- Simple prose mode that hides metadata and the structural heading for supported scenes
+- Fallback to source editing for documents containing markup the prose editor cannot safely handle
+- Optional Linux ADB sync script with a last-sync baseline, conflict detection, and backup copies
+- A Linux launcher that checks for a connected, authorized phone, syncs before opening novelWriter, and syncs again after it closes
+- A script to install a clickable desktop entry on Linux
 
-```bash
-python3 tools/novelwriter_launcher.py add "/home/dlefebvre/Nexus Story"
-python3 tools/novelwriter_launcher.py list
-```
+## What it does *not* do yet
 
-Launch novelWriter through the wrapper:
+- Full WYSIWYG editing of novelWriter formatting
+- Reliable automatic synchronization merely upon plugging in a phone
+- Cloud synchronization
+- Automatic project discovery/registration on the Linux side
+- Complete synchronization of every project asset, attachment, and metadata file
+- Guaranteed atomic saves or rollback of interrupted transfers
+- Proven conflict-free operation when the same project is open for editing on both devices
 
-```bash
-python3 tools/novelwriter_launcher.py run
-```
+Do not edit the same scene on both devices before synchronizing. Save and close active editors before syncing. Keep independent, versioned backups.
 
-The wrapper checks for exactly one authorized Android device, synchronizes registered projects before opening novelWriter, waits for novelWriter to exit, and synchronizes again. When no phone is connected, novelWriter opens normally and no synchronization is attempted. If a connected device produces a sync error, the launcher refuses to start novelWriter, avoiding accidental editing of stale files. On a post-exit error, both devices retain their copies for recovery.
+## Android build
 
-The launcher **does not automatically replace your desktop launcher**. Use this command (or configure a desktop shortcut pointing to it) to get automatic synchronization. Do not run another novelWriter instance concurrently, and close Novel Mobile's editor before synchronizing. The project must have a valid sync baseline; do not initialize synchronization blindly on a valuable manuscript.
+Requirements: Android SDK Platform 35, JDK 17, and an Android development environment with Gradle support. This repository uses Android Gradle Plugin 8.13.2 and the Gradle 8.13 wrapper.
 
-For projects whose names contain spaces, the ADB sync helper quotes shell paths correctly. Keep USB debugging enabled and authorized on your Pixel. No cloud is required.
+From the repository root:
 
-### Current limitations
+\`\`\`bash
+./gradlew assembleDebug
+\`\`\`
 
-- This is an early implementation and has not been end-to-end tested with the launcher yet.
-- Only the project XML, ToC.txt, and content Markdown files are synchronized; other project metadata and attachments are not synchronized.
-- Project registration is explicit, not automatic discovery.
-- Android changes not saved in Novel Mobile are not synchronized.
-- The desktop app's single-instance behavior may affect whether the launcher can wait for its exit; close other novelWriter instances first.
-- The existing sync script does not guarantee transactional rollback if an ADB transfer fails partway through. Maintain independent backups.
+To install the debug APK on a USB-connected, authorized Android phone:
+
+\`\`\`bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+\`\`\`
+
+On the phone, place an **extracted copy** of a novelWriter project under Documents, open Novel Mobile, and select the folder containing \`nwProject.nwx\`.
+
+## Linux USB synchronization
+
+Requirements: Python 3, Android SDK Platform Tools (\`adb\`), a USB-authorized Android device, and an existing novelWriter project on both devices.
+
+**Important:** The synchronization script tracks a baseline. For an existing phone project with edits, initialization imports the phone version of differing files and backs up both copies. Inspect your project and keep a separate backup before initializing.
+
+Example using a project named \`Example Novel\`:
+
+\`\`\`bash
+python3 tools/sync_usb.py "$HOME/Example Novel" --initialize-from-phone
+python3 tools/novelwriter_launcher.py add "$HOME/Example Novel"
+python3 tools/install_desktop_launcher.py
+\`\`\`
+
+After that, launch **novelWriter (Auto Sync)** from the Linux application launcher. It attempts to sync registered projects when the phone is connected and authorized, opens novelWriter, then syncs again after novelWriter exits.
+
+You can also run a manual sync:
+
+\`\`\`bash
+python3 tools/sync_usb.py "$HOME/Example Novel"
+\`\`\`
+
+If no authorized device is connected, the launcher can start novelWriter without syncing. A failed sync with a connected device blocks startup. The desktop entry currently opens a terminal so errors are visible.
+
+## Project format
+
+The implementation currently targets novelWriter projects with an \`nwProject.nwx\` XML index and \`content/*.md\` documents. The Android app is not a general-purpose Markdown-to-rich-text converter. Files with unsupported formatting are shown in source mode rather than silently transforming markup.
+
+## Contributing and project status
+
+Bug reports, compatibility tests, accessibility feedback, and pull requests are welcome once the repository is public. Particularly useful contributions include round-trip formatting tests, interrupted-transfer recovery, and Android accessibility improvements.
+
+This is a small independent project built to solve a practical writing problem. Please treat the synchronization tools as experimental until they have broader testing.
+
+## Licensing
+
+A license has not yet been selected. Until a license file is added, public visibility alone does **not** grant permission to copy, modify, or redistribute the source. An explicit open-source license should be chosen before announcing this as an open-source release.
