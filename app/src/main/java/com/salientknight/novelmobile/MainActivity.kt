@@ -20,13 +20,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,7 +58,7 @@ class MainActivity : ComponentActivity() {
                     saveDocument = ::saveDocument,
                     rememberFolder = { uri ->
                         contentResolver.takePersistableUriPermission(
-                            uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                         )
                     }
                 )
@@ -159,6 +154,8 @@ private fun ProjectBrowser(
     var selected by remember { mutableStateOf<ProjectItem?>(null) }
     var document by remember { mutableStateOf("") }
     var edited by remember { mutableStateOf("") }
+    var prose by remember { mutableStateOf(ProseFormat.parse("")) }
+    var sourceMode by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -185,7 +182,7 @@ private fun ProjectBrowser(
             Button(onClick = { picker.launch(null) }) {
                 Text("Open novelWriter project folder")
             }
-            Text("Read-only preview: no files will be modified.")
+            Text("Edit prose and tap Save. Complex formatted documents open in source mode to protect their markup.")
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             project?.let { snapshot ->
                 Text(snapshot.name, style = MaterialTheme.typography.titleLarge)
@@ -205,7 +202,9 @@ private fun ProjectBrowser(
                                     .clickable(enabled = item.type == "FILE") {
                                         try {
                                             document = readDocument(snapshot, item)
-                                            edited = document
+                                            prose = ProseFormat.parse(document)
+                                            sourceMode = !prose.plainMode
+                                            edited = if (sourceMode) document else prose.prose
                                             selected = item
                                             error = null
                                         } catch (exception: Exception) {
@@ -224,15 +223,19 @@ private fun ProjectBrowser(
                         }
                     }
                 } else {
-                    Button(onClick = { if (edited == document) selected = null else error = "Save or discard changes before leaving" }) { Text("Back to project") }
+                    Button(onClick = { if ((if (sourceMode) edited else prose.rebuild(edited)) == document) selected = null else error = "Save changes before leaving" }) { Text("Back to project") }
                     Button(onClick = {
                         try {
-                            saveDocument(snapshot, selected!!, document, edited)
-                            document = edited
+                            val output = if (sourceMode) edited else prose.rebuild(edited)
+                            saveDocument(snapshot, selected!!, document, output)
+                            document = output
+                            prose = ProseFormat.parse(output)
+                            edited = if (sourceMode) output else prose.prose
                             error = "Saved with local recovery backup"
                         } catch (e: Exception) { error = e.message ?: "Save failed" }
-                    }, enabled = edited != document) { Text("Save") }
+                    }, enabled = (if (sourceMode) edited else prose.rebuild(edited)) != document) { Text("Save") }
                     Text(selected!!.name, style = MaterialTheme.typography.titleMedium)
+                    Text(if (sourceMode) "Source mode: this document contains formatting that must be preserved." else "Prose mode: metadata and structural heading are hidden.")
                     OutlinedTextField(value = edited, onValueChange = { edited = it }, modifier = Modifier.fillMaxSize(), label = { Text("Document") })
                 }
             }
