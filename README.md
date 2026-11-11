@@ -91,6 +91,16 @@ Bug reports, compatibility tests, accessibility feedback, and pull requests are 
 
 This is a small independent project built to solve a practical writing problem. Please treat the synchronization tools as experimental until they have broader testing.
 
+## AI-Assisted Development
+
+Novel Mobile was developed through collaboration between a human software developer and OpenAI's ChatGPT.
+
+The project's goals, architecture, requirements, and development direction were guided by the developer, while AI was used extensively to generate code, troubleshoot issues, and accelerate implementation.
+
+This project demonstrates how AI-assisted development can turn a practical idea into working software with relatively little manual coding.
+
+As with any software, AI-generated code may contain errors. Contributions, code reviews, testing, and improvements from the open-source community are welcome.
+
 ## License and Disclaimer
 
 **Novel Mobile is free and open-source software, released under the MIT License.**
