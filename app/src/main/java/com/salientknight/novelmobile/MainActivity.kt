@@ -19,8 +19,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 ProjectBrowser(
                     openProject = ::readProject,
                     readDocument = ::readDocument,
+                    saveDocument = ::saveDocument,
                     rememberFolder = { uri ->
                         contentResolver.takePersistableUriPermission(
                             uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -118,6 +125,19 @@ class MainActivity : ComponentActivity() {
         return parsed
     }
 
+    private fun saveDocument(project: ProjectSnapshot, item: ProjectItem, original: String, edited: String) {
+        val file = project.contentFolder.findFile(item.handle + ".md")
+            ?: error("Document missing")
+        val current = contentResolver.openInputStream(file.uri)?.bufferedReader()?.use { it.readText() }
+            ?: error("Cannot read document")
+        check(current == original) { "Document changed externally. Save refused." }
+        val backup = java.io.File(filesDir, "recovery/" + item.handle + "-" + System.currentTimeMillis() + ".md")
+        check(backup.parentFile!!.exists() || backup.parentFile!!.mkdirs())
+        backup.writeText(current)
+        contentResolver.openOutputStream(file.uri, "wt")?.bufferedWriter()?.use { it.write(edited) }
+            ?: error("Cannot write document")
+    }
+
     private fun readDocument(project: ProjectSnapshot, item: ProjectItem): String {
         require(item.type == "FILE")
         val file = project.contentFolder.findFile("${item.handle}.md")
@@ -132,11 +152,13 @@ class MainActivity : ComponentActivity() {
 private fun ProjectBrowser(
     openProject: (Uri) -> ProjectSnapshot,
     readDocument: (ProjectSnapshot, ProjectItem) -> String,
+    saveDocument: (ProjectSnapshot, ProjectItem, String, String) -> Unit,
     rememberFolder: (Uri) -> Unit
 ) {
     var project by remember { mutableStateOf<ProjectSnapshot?>(null) }
     var selected by remember { mutableStateOf<ProjectItem?>(null) }
     var document by remember { mutableStateOf("") }
+    var edited by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -183,6 +205,7 @@ private fun ProjectBrowser(
                                     .clickable(enabled = item.type == "FILE") {
                                         try {
                                             document = readDocument(snapshot, item)
+                                            edited = document
                                             selected = item
                                             error = null
                                         } catch (exception: Exception) {
@@ -201,11 +224,16 @@ private fun ProjectBrowser(
                         }
                     }
                 } else {
-                    Button(onClick = { selected = null }) { Text("Back to project") }
+                    Button(onClick = { if (edited == document) selected = null else error = "Save or discard changes before leaving" }) { Text("Back to project") }
+                    Button(onClick = {
+                        try {
+                            saveDocument(snapshot, selected!!, document, edited)
+                            document = edited
+                            error = "Saved with local recovery backup"
+                        } catch (e: Exception) { error = e.message ?: "Save failed" }
+                    }, enabled = edited != document) { Text("Save") }
                     Text(selected!!.name, style = MaterialTheme.typography.titleMedium)
-                    LazyColumn {
-                        item { Text(document) }
-                    }
+                    OutlinedTextField(value = edited, onValueChange = { edited = it }, modifier = Modifier.fillMaxSize(), label = { Text("Document") })
                 }
             }
         }
