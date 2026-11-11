@@ -10,6 +10,9 @@ import sys
 
 CONFIG = Path.home() / ".config" / "novelmobile" / "projects.json"
 SYNC = Path(__file__).resolve().parent / "sync_usb.py"
+ADB_DIR = Path.home() / "Android" / "Sdk" / "platform-tools"
+if ADB_DIR.is_dir():
+    os.environ["PATH"] = str(ADB_DIR) + os.pathsep + os.environ.get("PATH", "")
 
 
 def load_projects():
@@ -39,7 +42,9 @@ def device_connected():
         return False
     devices = [line for line in result.stdout.splitlines()[1:] if line.endswith("\tdevice")]
     if len(devices) != 1:
-        print("No single authorized Pixel connected; USB sync skipped.", file=sys.stderr)
+        if any("\tunauthorized" in line or "\toffline" in line for line in result.stdout.splitlines()):
+            raise RuntimeError("Pixel is connected but not authorized or offline. Unlock and authorize USB debugging.")
+        print("No authorized Pixel connected; USB sync skipped.", file=sys.stderr)
         return False
     return True
 
@@ -92,7 +97,12 @@ def main():
         return 0
     if action != "run":
         parser.error("Unknown action")
-    if not sync_projects(projects, "before launch"):
+    try:
+        pre_sync_ok = sync_projects(projects, "before launch")
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if not pre_sync_ok:
         print("Sync failed. novelWriter NOT launched to avoid editing an unsynchronized project.", file=sys.stderr)
         return 2
     binary = shutil.which("novelwriter")
@@ -104,7 +114,12 @@ def main():
         exit_code = subprocess.run([binary, *(args.novelwriter_args if args.action == "run" else [])]).returncode
     except KeyboardInterrupt:
         exit_code = 130
-    if not sync_projects(projects, "after exit"):
+    try:
+        post_sync_ok = sync_projects(projects, "after exit")
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 3
+    if not post_sync_ok:
         print("Post-exit sync failed; changes remain on their respective devices.", file=sys.stderr)
         return 3
     return exit_code
