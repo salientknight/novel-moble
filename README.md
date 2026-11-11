@@ -91,10 +91,14 @@ Bug reports, compatibility tests, accessibility feedback, and pull requests are 
 
 This is a small independent project built to solve a practical writing problem. Please treat the synchronization tools as experimental until they have broader testing.
 
-## License and disclaimer
+## License and Disclaimer
 
-**Novel Mobile is provided free of charge and is used entirely at your own risk.** This is experimental software. Keep independent backups of your writing before using the editor or synchronization tools.
+**Novel Mobile is free and open-source software, released under the MIT License.**
 
-This project is licensed under the **MIT License**. You are welcome to fork it, modify it, and continue developing it. If you redistribute the software or substantial portions of its code, please follow the MIT License terms, including retaining the copyright and license notice.
+This project was created to make writing more accessible and convenient. It is shared freely with the hope that others will find it useful, improve upon it, and contribute to its continued development.
 
-The software is provided **"as is," without warranty of any kind**. See [LICENSE](LICENSE) for the complete legal terms.
+You are welcome to use, modify, fork, and redistribute Novel Mobile under the terms of the [MIT License](LICENSE). If you build upon this project, please preserve the original copyright and license notices as required by that license.
+
+**Use at your own risk.** Novel Mobile is provided "as is," without warranties or guarantees of any kind. Although protecting your writing is a development priority, software errors and synchronization failures are possible. Always maintain independent backups of your manuscripts.
+
+Contributions, improvements, and bug reports are welcome.
