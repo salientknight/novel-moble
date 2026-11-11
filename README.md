@@ -14,6 +14,14 @@ So Novel Mobile began as a small experiment: read a novelWriter project on Andro
 
 The goal isn't to replace novelWriter or build another giant writing suite. It's to remove friction between the places where writing happens.
 
+## Acknowledgment
+
+Novel Mobile is an independent, open-source companion for [novelWriter](https://novelwriter.io/), the open-source writing application that inspired this project.
+
+We appreciate the work of the novelWriter maintainers and contributors. You can learn more on the [official novelWriter website](https://novelwriter.io/) or explore its [source code on GitHub](https://github.com/vkbo/novelWriter).
+
+Novel Mobile is not affiliated with, endorsed by, or officially maintained by the novelWriter project.
+
 ## What works today
 
 - Native Android app built with Kotlin and Jetpack Compose
