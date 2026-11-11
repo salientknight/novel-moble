@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,10 @@ EXCLUDED = {"nwProject.lock"}
 
 def adb(*args, check=True):
     return subprocess.run(["adb", *args], text=True, capture_output=True, check=check)
+
+def adb_shell(*parts, check=True):
+    command = " ".join(shlex.quote(str(part)) for part in parts)
+    return adb("shell", command, check=check)
 
 def hashes(root):
     result = {}
@@ -56,16 +61,16 @@ def main():
     with tempfile.TemporaryDirectory(prefix="novelmobile-") as temp:
         phone = Path(temp) / "phone"
         phone.mkdir()
-        exists = adb("shell", "test", "-f", remote + "/nwProject.nwx", check=False).returncode == 0
+        exists = adb_shell("test", "-f", remote + "/nwProject.nwx", check=False).returncode == 0
         if not exists:
             if state_path.exists():
                 sys.exit("Phone project disappeared. Refusing to overwrite; restore it first.")
-            adb("shell", "mkdir", "-p", remote)
+            adb_shell("mkdir", "-p", remote)
             result = adb("push", str(project / "nwProject.nwx"), remote + "/nwProject.nwx")
             for rel in hashes(project):
                 if rel == "nwProject.nwx":
                     continue
-                adb("shell", "mkdir", "-p", remote + "/" + str(Path(rel).parent))
+                adb_shell("mkdir", "-p", remote + "/" + str(Path(rel).parent))
                 adb("push", str(project / rel), remote + "/" + rel)
             state_path.write_text(json.dumps(hashes(project), indent=2) + "\n")
             print("Initial project copy sent to phone. Sync baseline saved.")
@@ -122,7 +127,7 @@ def main():
         for rel in to_laptop:
             copy_file(phone / rel, project / rel)
         for rel in to_phone:
-            adb("shell", "mkdir", "-p", remote + "/" + str(Path(rel).parent))
+            adb_shell("mkdir", "-p", remote + "/" + str(Path(rel).parent))
             adb("push", str(project / rel), remote + "/" + rel)
         state_path.write_text(json.dumps(hashes(project), indent=2) + "\n")
         print(f"Sync complete: {len(to_laptop)} phone -> laptop, {len(to_phone)} laptop -> phone.")
