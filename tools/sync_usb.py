@@ -40,11 +40,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("project", type=Path, help="Local novelWriter project directory")
     parser.add_argument("--remote", default=None, help="ADB folder on phone")
+    parser.add_argument("--initialize-from-phone", action="store_true", help="Import existing phone edits with backups on first sync")
     args = parser.parse_args()
     project = args.project.expanduser().resolve()
     if not (project / "nwProject.nwx").is_file():
         parser.error("Expected a project folder containing nwProject.nwx")
-    remote = args.remote or REMOTE_ROOT + "/" + project.name
+    remote = args.remote or "/sdcard/Documents/" + project.name
     if not remote.startswith("/sdcard/Documents/") or ".." in Path(remote).parts:
         parser.error("Remote folder must be under /sdcard/Documents and contain no '..'")
     devices = adb("devices").stdout.splitlines()[1:]
@@ -73,7 +74,20 @@ def main():
         local_hash = hashes(project)
         phone_hash = hashes(phone)
         if not state_path.exists():
-            sys.exit("Phone project exists but no sync baseline exists. Refusing unsafe first merge.")
+            if not args.initialize_from_phone:
+                sys.exit("No baseline. Use --initialize-from-phone once after confirming the phone version is desired.")
+            if set(local_hash) != set(phone_hash):
+                sys.exit("Project file lists differ. Refusing initial import.")
+            changed = [rel for rel in sorted(local_hash) if local_hash[rel] != phone_hash[rel]]
+            backup = project / STATE_DIR / "backups" / ("initial-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+            for rel in changed:
+                copy_file(project / rel, backup / "laptop" / rel)
+                copy_file(phone / rel, backup / "phone" / rel)
+            for rel in changed:
+                copy_file(phone / rel, project / rel)
+            state_path.write_text(json.dumps(hashes(project), indent=2) + "\n")
+            print(f"Initialized sync: imported {len(changed)} phone changes, backed up both versions.")
+            return
         baseline = json.loads(state_path.read_text())
         all_paths = set(local_hash) | set(phone_hash) | set(baseline)
         conflicts = []
