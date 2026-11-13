@@ -33,6 +33,7 @@ import org.xmlpull.v1.XmlPullParser
 import android.util.Xml
 import org.json.JSONObject
 import org.json.JSONArray
+import java.util.UUID
 
 data class ProjectItem(
     val handle: String,
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     openProject = ::readProject,
                     readDocument = ::readDocument,
                     saveDocument = ::saveDocument,
+                    addReference = ::addReference,
                     rememberFolder = { uri ->
                         contentResolver.takePersistableUriPermission(
                             uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -180,6 +182,43 @@ class MainActivity : ComponentActivity() {
         return ProjectSnapshot(json.optString("title", root.name ?: "Nexus Writer"), items, root, root, true)
     }
 
+    private fun addReference(project: ProjectSnapshot, chapterId: String?, kind: String, title: String): ProjectSnapshot {
+        require(project.nexus) { "References require a Nexus Writer project" }
+        require(kind in listOf("character", "note", "research", "image", "resource", "seed"))
+        require(title.isNotBlank())
+        require(chapterId == null || project.items.any { it.handle == chapterId && it.category == "chapter" })
+        val root = project.root
+        val manifest = root.findFile("project.json") ?: error("Missing project.json")
+        val original = contentResolver.openInputStream(manifest.uri)?.bufferedReader()?.use { it.readText() }
+            ?: error("Cannot read project.json")
+        val json = JSONObject(original)
+        val references = json.optJSONArray("references") ?: JSONArray().also { json.put("references", it) }
+        val id = UUID.randomUUID().toString().replace("-", "").take(12)
+        val safeTitle = title.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(48).ifEmpty { "untitled" }
+        val segments = listOf("notes", chapterId ?: "project", kind, "$safeTitle-$id.md")
+        var folder = root
+        for (segment in segments.dropLast(1)) {
+            folder = folder.findFile(segment) ?: folder.createDirectory(segment)
+                ?: error("Cannot create directory $segment")
+        }
+        val file = folder.createFile("text/markdown", segments.last())
+            ?: error("Cannot create reference file")
+        val actualPath = (segments.dropLast(1) + (file.name ?: segments.last())).joinToString("/")
+        references.put(JSONObject().put("id", id).put("kind", kind).put("title", title)
+            .put("path", actualPath).put("chapter_id", chapterId ?: JSONObject.NULL))
+        val backup = java.io.File(filesDir, "recovery/project-${System.currentTimeMillis()}.json")
+        check(backup.parentFile!!.exists() || backup.parentFile!!.mkdirs())
+        backup.writeText(original)
+        try {
+            contentResolver.openOutputStream(manifest.uri, "wt")?.bufferedWriter()?.use {
+                it.write(json.toString(2) + "\n")
+            } ?: error("Cannot update project.json")
+        } catch (error: Exception) {
+            file.delete()
+            throw error
+        }
+        return readNexusProject(root)
+    }
     private fun saveDocument(project: ProjectSnapshot, item: ProjectItem, original: String, edited: String) {
         val file = if (project.nexus) resolvePath(project.root, item.path)
                    else project.contentFolder.findFile(item.handle + ".md")
@@ -210,6 +249,7 @@ private fun ProjectBrowser(
     openProject: (Uri) -> ProjectSnapshot,
     readDocument: (ProjectSnapshot, ProjectItem) -> String,
     saveDocument: (ProjectSnapshot, ProjectItem, String, String) -> Unit,
+    addReference: (ProjectSnapshot, String?, String, String) -> ProjectSnapshot,
     rememberFolder: (Uri) -> Unit
 ) {
     var project by remember { mutableStateOf<ProjectSnapshot?>(null) }
@@ -219,6 +259,10 @@ private fun ProjectBrowser(
     var prose by remember { mutableStateOf(ProseFormat.parse("")) }
     var sourceMode by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var newTitle by remember { mutableStateOf("") }
+    var newKind by remember { mutableStateOf("character") }
+    var newChapter by remember { mutableStateOf<String?>(null) }
+    var showNew by remember { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
