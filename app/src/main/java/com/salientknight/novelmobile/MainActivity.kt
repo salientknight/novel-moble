@@ -293,6 +293,38 @@ private fun ProjectBrowser(
             project?.let { snapshot ->
                 Text(snapshot.name, style = MaterialTheme.typography.titleLarge)
                 if (selected == null) {
+                    if (snapshot.nexus) {
+                        Button(onClick = { showNew = !showNew }) {
+                            Text(if (showNew) "Cancel new reference" else "Add reference")
+                        }
+                        if (showNew) {
+                            OutlinedTextField(value = newTitle, onValueChange = { newTitle = it },
+                                label = { Text("Reference name") })
+                            Text("Type: $newKind")
+                            androidx.compose.foundation.layout.Row {
+                                listOf("character", "note", "research", "image", "resource", "seed").forEach { kind ->
+                                    androidx.compose.material3.TextButton(onClick = { newKind = kind }) {
+                                        Text(kind.take(3))
+                                    }
+                                }
+                            }
+                            Text("Chapter: " + (snapshot.items.firstOrNull { it.handle == newChapter }?.name ?: "Project-wide"))
+                            androidx.compose.material3.TextButton(onClick = { newChapter = null }) { Text("Project-wide") }
+                            snapshot.items.filter { it.category == "chapter" }.forEach { chapter ->
+                                androidx.compose.material3.TextButton(onClick = { newChapter = chapter.handle }) {
+                                    Text(chapter.name)
+                                }
+                            }
+                            Button(onClick = {
+                                try {
+                                    project = addReference(snapshot, newChapter, newKind, newTitle.trim())
+                                    newTitle = ""
+                                    showNew = false
+                                    error = null
+                                } catch (e: Exception) { error = e.message ?: "Cannot add reference" }
+                            }, enabled = newTitle.isNotBlank()) { Text("Create reference") }
+                        }
+                    }
                     val ordered = remember(snapshot) {
                         val children = snapshot.items.groupBy { it.parent }
                         fun walk(parent: String, depth: Int): List<Pair<ProjectItem, Int>> =
