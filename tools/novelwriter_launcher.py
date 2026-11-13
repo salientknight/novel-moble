@@ -78,8 +78,8 @@ def main():
     projects = load_projects()
     if action == "add":
         project = args.project.expanduser().resolve()
-        if not (project / "nwProject.nwx").is_file():
-            parser.error("Expected project directory containing nwProject.nwx")
+        if not (project / "nwProject.nwx").is_file() and not (project / "project.json").is_file():
+            parser.error("Expected project directory containing nwProject.nwx or project.json")
         if str(project) not in projects:
             projects.append(str(project))
             save_projects(projects)
