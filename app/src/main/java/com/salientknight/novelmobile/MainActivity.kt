@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import org.xmlpull.v1.XmlPullParser
 import android.util.Xml
+import org.json.JSONObject
+import org.json.JSONArray
 
 data class ProjectItem(
     val handle: String,
@@ -38,13 +40,16 @@ data class ProjectItem(
     val name: String,
     val type: String,
     val category: String,
-    val order: Int
+    val order: Int,
+    val path: String = ""
 )
 
 data class ProjectSnapshot(
     val name: String,
     val items: List<ProjectItem>,
-    val contentFolder: DocumentFile
+    val contentFolder: DocumentFile,
+    val root: DocumentFile = contentFolder,
+    val nexus: Boolean = false
 )
 
 class MainActivity : ComponentActivity() {
@@ -69,6 +74,7 @@ class MainActivity : ComponentActivity() {
     private fun readProject(uri: Uri): ProjectSnapshot {
         val root = DocumentFile.fromTreeUri(this, uri)
             ?: error("Cannot access selected folder")
+        if (root.findFile("project.json") != null) return readNexusProject(root)
         val projectFile = root.findFile("nwProject.nwx")
             ?: error("Select the novelWriter project folder containing nwProject.nwx")
         val contentFolder = root.findFile("content")
@@ -120,8 +126,63 @@ class MainActivity : ComponentActivity() {
         return parsed
     }
 
+    private fun resolvePath(root: DocumentFile, relative: String): DocumentFile? {
+        var current = root
+        for (segment in relative.split('/').filter { it.isNotEmpty() }) {
+            current = current.findFile(segment) ?: return null
+        }
+        return current
+    }
+
+    private fun readNexusProject(root: DocumentFile): ProjectSnapshot {
+        val manifest = root.findFile("project.json") ?: error("Missing project.json")
+        val raw = contentResolver.openInputStream(manifest.uri)?.bufferedReader()?.use { it.readText() }
+            ?: error("Cannot read project.json")
+        val json = JSONObject(raw)
+        require(json.optString("format") == "nexus-writer-1") { "Unsupported Nexus Writer project format" }
+        val items = mutableListOf<ProjectItem>()
+        var order = 0
+        fun add(item: JSONObject, parent: String, kind: String, file: String = ""): String {
+            val id = item.getString("id")
+            items.add(ProjectItem(id, parent, item.optString("title", kind),
+                if (file.isEmpty()) "FOLDER" else "FILE", kind, order++, file))
+            return id
+        }
+        val books = json.optJSONArray("books") ?: JSONArray()
+        for (bi in 0 until books.length()) {
+            val book = books.getJSONObject(bi)
+            val bookId = add(book, "None", "book")
+            val chapters = book.optJSONArray("chapters") ?: JSONArray()
+            for (ci in 0 until chapters.length()) {
+                val chapter = chapters.getJSONObject(ci)
+                val chapterId = add(chapter, bookId, "chapter", chapter.getString("path") + "/opening.md")
+                val scenes = chapter.optJSONArray("scenes") ?: JSONArray()
+                for (si in 0 until scenes.length()) {
+                    val scene = scenes.getJSONObject(si)
+                    add(scene, chapterId, "scene", scene.getString("path"))
+                }
+            }
+        }
+        val kinds = listOf("character", "note", "research", "image", "resource", "seed")
+        val references = json.optJSONArray("references") ?: JSONArray()
+        for (kind in kinds) {
+            val groupId = "group-" + kind
+            items.add(ProjectItem(groupId, "None", kind.replaceFirstChar { it.uppercase() } + "s",
+                "FOLDER", "reference_group", order++))
+            for (i in 0 until references.length()) {
+                val entry = references.getJSONObject(i)
+                if (entry.optString("kind") != kind) continue
+                val chapterId = entry.optString("chapter_id")
+                val parent = if (chapterId.isNotBlank() && chapterId != "null") chapterId else groupId
+                add(entry, parent, kind, entry.getString("path"))
+            }
+        }
+        return ProjectSnapshot(json.optString("title", root.name ?: "Nexus Writer"), items, root, root, true)
+    }
+
     private fun saveDocument(project: ProjectSnapshot, item: ProjectItem, original: String, edited: String) {
-        val file = project.contentFolder.findFile(item.handle + ".md")
+        val file = if (project.nexus) resolvePath(project.root, item.path)
+                   else project.contentFolder.findFile(item.handle + ".md")
             ?: error("Document missing")
         val current = contentResolver.openInputStream(file.uri)?.bufferedReader()?.use { it.readText() }
             ?: error("Cannot read document")
@@ -135,7 +196,8 @@ class MainActivity : ComponentActivity() {
 
     private fun readDocument(project: ProjectSnapshot, item: ProjectItem): String {
         require(item.type == "FILE")
-        val file = project.contentFolder.findFile("${item.handle}.md")
+        val file = if (project.nexus) resolvePath(project.root, item.path)
+                   else project.contentFolder.findFile("${item.handle}.md")
             ?: error("Document ${item.name} is missing")
         return contentResolver.openInputStream(file.uri)?.bufferedReader(Charsets.UTF_8)?.use {
             it.readText()
@@ -180,7 +242,7 @@ private fun ProjectBrowser(
         ) {
             Text("Novel Mobile", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = { picker.launch(null) }) {
-                Text("Open novelWriter project folder")
+                Text("Open Nexus Writer or novelWriter project")
             }
             Text("Edit prose and tap Save. Complex formatted documents open in source mode to protect their markup.")
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -203,7 +265,7 @@ private fun ProjectBrowser(
                                         try {
                                             document = readDocument(snapshot, item)
                                             prose = ProseFormat.parse(document)
-                                            sourceMode = !prose.plainMode
+                                            sourceMode = snapshot.nexus || !prose.plainMode
                                             edited = if (sourceMode) document else prose.prose
                                             selected = item
                                             error = null
@@ -235,7 +297,7 @@ private fun ProjectBrowser(
                         } catch (e: Exception) { error = e.message ?: "Save failed" }
                     }, enabled = (if (sourceMode) edited else prose.rebuild(edited)) != document) { Text("Save") }
                     Text(selected!!.name, style = MaterialTheme.typography.titleMedium)
-                    Text(if (sourceMode) "Source mode: this document contains formatting that must be preserved." else "Prose mode: metadata and structural heading are hidden.")
+                    Text(if (snapshot.nexus) "Markdown mode: Nexus Writer files are preserved exactly." else if (sourceMode) "Source mode: this document contains formatting that must be preserved." else "Prose mode: metadata and structural heading are hidden.")
                     OutlinedTextField(value = edited, onValueChange = { edited = it }, modifier = Modifier.fillMaxSize(), label = { Text("Document") })
                 }
             }
