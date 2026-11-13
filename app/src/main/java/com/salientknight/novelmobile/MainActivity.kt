@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
         val references = json.optJSONArray("references") ?: JSONArray()
         for (kind in kinds) {
             val groupId = "group-" + kind
-            items.add(ProjectItem(groupId, "None", kind.replaceFirstChar { it.uppercase() } + "s",
+            items.add(ProjectItem(groupId, "None", if (kind == "research") "Research" else kind.replaceFirstChar { it.uppercase() } + "s",
                 "FOLDER", "reference_group", order++))
             for (i in 0 until references.length()) {
                 val entry = references.getJSONObject(i)
@@ -220,8 +220,8 @@ class MainActivity : ComponentActivity() {
         return readNexusProject(root)
     }
     private fun saveDocument(project: ProjectSnapshot, item: ProjectItem, original: String, edited: String) {
-        val file = if (project.nexus) resolvePath(project.root, item.path)
-                   else project.contentFolder.findFile(item.handle + ".md")
+        val file = (if (project.nexus) resolvePath(project.root, item.path)
+                    else project.contentFolder.findFile(item.handle + ".md"))
             ?: error("Document missing")
         val current = contentResolver.openInputStream(file.uri)?.bufferedReader()?.use { it.readText() }
             ?: error("Cannot read document")
@@ -235,8 +235,8 @@ class MainActivity : ComponentActivity() {
 
     private fun readDocument(project: ProjectSnapshot, item: ProjectItem): String {
         require(item.type == "FILE")
-        val file = if (project.nexus) resolvePath(project.root, item.path)
-                   else project.contentFolder.findFile("${item.handle}.md")
+        val file = (if (project.nexus) resolvePath(project.root, item.path)
+                    else project.contentFolder.findFile("${item.handle}.md"))
             ?: error("Document ${item.name} is missing")
         return contentResolver.openInputStream(file.uri)?.bufferedReader(Charsets.UTF_8)?.use {
             it.readText()
