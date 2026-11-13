@@ -2,7 +2,7 @@
 """On-demand, conflict-safe ADB synchronization for novelWriter projects.
 
 Requires a previously copied Android project folder under /sdcard/Documents.
-Only syncs project XML, content/*.md and ToC.txt. No background daemon.
+Syncs novelWriter or Nexus Writer manuscript, reference Markdown and project metadata. No background daemon.
 """
 import argparse
 import hashlib
@@ -27,13 +27,33 @@ def adb_shell(*parts, check=True):
     command = " ".join(shlex.quote(str(part)) for part in parts)
     return adb("shell", command, check=check)
 
+def project_format(root):
+    if (root / "project.json").is_file():
+        data = json.loads((root / "project.json").read_text(encoding="utf-8"))
+        if data.get("format") != "nexus-writer-1":
+            raise ValueError("Unsupported Nexus Writer project format")
+        return "nexus"
+    if (root / "nwProject.nwx").is_file():
+        return "novelwriter"
+    raise ValueError("Expected project.json or nwProject.nwx")
+
+
 def hashes(root):
+    kind = project_format(root)
     result = {}
     for path in root.rglob("*"):
         if not path.is_file():
             continue
         rel = path.relative_to(root).as_posix()
-        if rel in ("nwProject.nwx", "ToC.txt") or (rel.startswith("content/") and rel.endswith(".md")):
+        if kind == "nexus":
+            included = rel == "project.json" or (
+                rel.startswith(("manuscript/", "notes/")) and rel.endswith(".md")
+            )
+        else:
+            included = rel in ("nwProject.nwx", "ToC.txt") or (
+                rel.startswith("content/") and rel.endswith(".md")
+            )
+        if included:
             result[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return result
 
@@ -43,13 +63,16 @@ def copy_file(source, dest):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("project", type=Path, help="Local novelWriter project directory")
+    parser.add_argument("project", type=Path, help="Local novelWriter or Nexus Writer project directory")
     parser.add_argument("--remote", default=None, help="ADB folder on phone")
     parser.add_argument("--initialize-from-phone", action="store_true", help="Import existing phone edits with backups on first sync")
     args = parser.parse_args()
     project = args.project.expanduser().resolve()
-    if not (project / "nwProject.nwx").is_file():
-        parser.error("Expected a project folder containing nwProject.nwx")
+    try:
+        kind = project_format(project)
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        parser.error(str(exc))
+    manifest_name = "project.json" if kind == "nexus" else "nwProject.nwx"
     remote = args.remote or "/sdcard/Documents/" + project.name
     if not remote.startswith("/sdcard/Documents/") or ".." in Path(remote).parts:
         parser.error("Remote folder must be under /sdcard/Documents and contain no '..'")
@@ -61,14 +84,17 @@ def main():
     with tempfile.TemporaryDirectory(prefix="novelmobile-") as temp:
         phone = Path(temp) / "phone"
         phone.mkdir()
-        exists = adb_shell("test", "-f", remote + "/nwProject.nwx", check=False).returncode == 0
+        exists = adb_shell("test", "-f", remote + "/" + manifest_name, check=False).returncode == 0
+        other_manifest = "nwProject.nwx" if kind == "nexus" else "project.json"
+        if adb_shell("test", "-f", remote + "/" + other_manifest, check=False).returncode == 0:
+            sys.exit("Phone folder contains a different project format. Refusing to mix projects.")
         if not exists:
             if state_path.exists():
                 sys.exit("Phone project disappeared. Refusing to overwrite; restore it first.")
             adb_shell("mkdir", "-p", remote)
-            result = adb("push", str(project / "nwProject.nwx"), remote + "/nwProject.nwx")
+            result = adb("push", str(project / manifest_name), remote + "/" + manifest_name)
             for rel in hashes(project):
-                if rel == "nwProject.nwx":
+                if rel == manifest_name:
                     continue
                 adb_shell("mkdir", "-p", remote + "/" + str(Path(rel).parent))
                 adb("push", str(project / rel), remote + "/" + rel)
