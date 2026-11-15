@@ -8,6 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -375,7 +378,14 @@ private fun ProjectBrowser(
                     }, enabled = (if (sourceMode) edited else prose.rebuild(edited)) != document) { Text("Save") }
                     Text(selected!!.name, style = MaterialTheme.typography.titleMedium)
                     Text(if (snapshot.nexus) "Markdown mode: Nexus Writer files are preserved exactly." else if (sourceMode) "Source mode: this document contains formatting that must be preserved." else "Prose mode: metadata and structural heading are hidden.")
-                    OutlinedTextField(value = edited, onValueChange = { edited = it }, modifier = Modifier.fillMaxWidth().weight(1f), label = { Text("Document") })
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                        OutlinedTextField(
+                            value = edited,
+                            onValueChange = { edited = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Document") }
+                        )
+                    }
                 }
             }
         }
