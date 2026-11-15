@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -281,7 +283,7 @@ private fun ProjectBrowser(
 
     Scaffold { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).imePadding().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Novel Mobile", style = MaterialTheme.typography.headlineMedium)
@@ -374,7 +376,7 @@ private fun ProjectBrowser(
                     }, enabled = (if (sourceMode) edited else prose.rebuild(edited)) != document) { Text("Save") }
                     Text(selected!!.name, style = MaterialTheme.typography.titleMedium)
                     Text(if (snapshot.nexus) "Markdown mode: Nexus Writer files are preserved exactly." else if (sourceMode) "Source mode: this document contains formatting that must be preserved." else "Prose mode: metadata and structural heading are hidden.")
-                    OutlinedTextField(value = edited, onValueChange = { edited = it }, modifier = Modifier.fillMaxSize(), label = { Text("Document") })
+                    OutlinedTextField(value = edited, onValueChange = { edited = it }, modifier = Modifier.fillMaxWidth().weight(1f), label = { Text("Document") })
                 }
             }
         }
